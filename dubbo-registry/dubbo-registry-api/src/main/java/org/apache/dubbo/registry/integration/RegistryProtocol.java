@@ -192,23 +192,39 @@ public class RegistryProtocol implements Protocol {
 
     @Override
     public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+
+        // URL registryUrl = originInvoker.getUrl();
+        // 此时的URL为：
+        // registryUrl = registry://127.0.0.1:2181/org.apache.dubbo.registry.RegistryService?application=dubbo-spring-provider&dubbo=2.0.2&export=rest%3A%2F%2F192.168.129.1%3A8081%2Fcom.xiaobei.learning.dubbo.api.UserService%3Fanyhost%3Dtrue%26application%3Ddubbo-spring-provider%26bean.name%3Dcom.xiaobei.learning.dubbo.api.UserService%26bind.ip%3D192.168.129.1%26bind.port%3D8081%26deprecated%3Dfalse%26dubbo%3D2.0.2%26dynamic%3Dtrue%26generic%3Dfalse%26interface%3Dcom.xiaobei.learning.dubbo.api.UserService%26methods%3Dlist%26pid%3D4224%26register%3Dtrue%26release%3D2.7.3%26server%3Djetty%26side%3Dprovider%26timestamp%3D1571175753624&pid=4224&registry=zookeeper&release=2.7.3&simplified=true&timestamp=1571175753617
         URL registryUrl = getRegistryUrl(originInvoker);
+
+        // 此时的URL为：
+        // registryUrl = zookeeper://127.0.0.1:2181/org.apache.dubbo.registry.RegistryService?application=dubbo-spring-provider&dubbo=2.0.2&export=rest%3A%2F%2F192.168.129.1%3A8081%2Fcom.xiaobei.learning.dubbo.api.UserService%3Fanyhost%3Dtrue%26application%3Ddubbo-spring-provider%26bean.name%3Dcom.xiaobei.learning.dubbo.api.UserService%26bind.ip%3D192.168.129.1%26bind.port%3D8081%26deprecated%3Dfalse%26dubbo%3D2.0.2%26dynamic%3Dtrue%26generic%3Dfalse%26interface%3Dcom.xiaobei.learning.dubbo.api.UserService%26methods%3Dlist%26pid%3D10920%26register%3Dtrue%26release%3D2.7.3%26server%3Djetty%26side%3Dprovider%26timestamp%3D1571175539147&pid=10920&release=2.7.3&simplified=true&timestamp=1571175539142
         // url to export locally
         URL providerUrl = getProviderUrl(originInvoker);
+
+        // providerUrl = rest://192.168.129.1:8081/com.xiaobei.learning.dubbo.api.UserService?anyhost=true&application=dubbo-spring-provider&bean.name=com.xiaobei.learning.dubbo.api.UserService&bind.ip=192.168.129.1&bind.port=8081&deprecated=false&dubbo=2.0.2&dynamic=true&generic=false&interface=com.xiaobei.learning.dubbo.api.UserService&methods=list&pid=3096&register=true&release=2.7.3&server=jetty&side=provider&timestamp=1571176156999
+        // 开头的rest为本服务暴露的协议
+
 
         // Subscribe the override data
         // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call
         //  the same service. Because the subscribed is cached key with the name of the service, it causes the
         //  subscription information to cover.
+        /*=========================dubbo admin 修改完之后重新发布服务 start===========================*/
         final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
         final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
         overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
 
         providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
+        /*=========================dubbo admin 修改完之后重新发布服务 start===========================*/
+
         //export invoker
+        // 本质上就是去启动一个netty服务
         final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
         // url to registry
+        // 把 dubbo:// url注册到zk等注册中心上
         final Registry registry = getRegistry(originInvoker);
         final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
         ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
@@ -241,7 +257,21 @@ public class RegistryProtocol implements Protocol {
         String key = getCacheKey(originInvoker);
 
         return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
+            // TODO orginInvoker -> InvokerDelegate(DelegateProviderMetaDataInvoker(invoker))
+            // DelegateProviderMetaDataInvoker是在
+            // org.apache.dubbo.config.ServiceConfig.doExportUrlsFor1Protocol中做的包装
             Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
+            // 此时的protocol实际上是
+            // QosProtocolWrapper(ProtocolListenerWrapper(ProtocolFilterWrapper(DubboProtocol)))
+            /**
+             * 这些包装操作实际上是在
+             * {@link org.apache.dubbo.common.extension.ExtensionLoader#loadClass}
+             * {@link ExtensionLoader#createExtension(java.lang.String)}
+             * 中做的
+             **/
+            /**
+             * 此时的protocol -> Protocol$Adaptive
+             */
             return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
         });
     }
