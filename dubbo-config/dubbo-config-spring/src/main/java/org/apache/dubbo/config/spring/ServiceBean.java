@@ -57,8 +57,18 @@ import static org.apache.dubbo.config.spring.util.BeanFactoryUtils.addApplicatio
  *
  * @export
  */
-public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean, DisposableBean,
-        ApplicationContextAware, ApplicationListener<ContextRefreshedEvent>, BeanNameAware,
+public class ServiceBean<T> extends ServiceConfig<T> implements
+        // 在容器初始化之后执行
+        InitializingBean,
+        // 在容器销毁时执行
+        DisposableBean,
+        // 获取spring应用上下文的ApplicationContext
+        ApplicationContextAware,
+        // 获取当前bean在BeanFactory中的id
+        BeanNameAware,
+        // 监听spring容器的启动成功事件
+        ApplicationListener<ContextRefreshedEvent>,
+        // 感知事件发布
         ApplicationEventPublisherAware {
 
 
@@ -105,12 +115,20 @@ public class ServiceBean<T> extends ServiceConfig<T> implements InitializingBean
         return service;
     }
 
+    /**
+     * 此方法为监听spring事件，当spring启动成功后会执行。
+     * {@link ServiceConfig#exported}
+     * {@link ServiceConfig#unexported}
+     * @param event
+     */
     @Override
     public void onApplicationEvent(ContextRefreshedEvent event) {
+        // TODO 这两个条件是什么意思？
         if (!isExported() && !isUnexported()) {
             if (logger.isInfoEnabled()) {
                 logger.info("The service ready on spring started. service: " + getInterface());
             }
+            // TODO dubbo的入口点！！
             export();
         }
     }

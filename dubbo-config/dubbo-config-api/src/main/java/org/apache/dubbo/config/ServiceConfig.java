@@ -557,21 +557,43 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
             }
         }
         // export service
+        // FIXME dubbo获取ip的优先级
+        // TODO dubbo的ip为什么不能使用127.0.0.1呢？
+        /**
+         * Configuration priority: environment variables -> java system properties -> host property in config file ->
+         * /etc/hosts -> default network address -> first available network address
+         */
         String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
+        // FIXME dubbo获取port的优先级
+        /**
+         * Configuration priority: environment variable -> java system properties -> port property in protocol config file
+         * -> protocol default port
+         */
         Integer port = this.findConfigedPorts(protocolConfig, name, map);
+        /**
+         * dubbo://192.168.129.1:20880/com.xiaobei.learning.dubbo.api.DemoService?anyhost=true&application=dubbo-springboot-provider&bean.name=ServiceBean:com.xiaobei.learning.dubbo.api.DemoService&bind.ip=192.168.129.1&bind.port=20880&deprecated=false&dubbo=2.0.2&dynamic=true&generic=false&interface=com.xiaobei.learning.dubbo.api.DemoService&methods=say&pid=428&qos.enable=false&register=true&release=2.7.3&side=provider&timestamp=1571265553059
+         */
         URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
 
+        // TODO dubbo-admin中做配置的动态修改 start
         if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                 .hasExtension(url.getProtocol())) {
             url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
                     .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
         }
+        // TODO dubbo-admin中做配置的动态修改 end
 
+
+        // 进入服务发布流程 start
+        // scop 选择服务发布的范围（local/remote）
+        // 当为remote时会发布local和remote
+        // Defines the service visibility, choise:[local remote]. default is remote, which can be invoked by network。
         String scope = url.getParameter(SCOPE_KEY);
         // don't export when none is configured
         if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
 
             // export to local if the config is not remote (export to remote only when config is remote)
+            // TODO 什么情况下会有本地发布？
             if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
                 exportLocal(url);
             }
@@ -601,9 +623,16 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
                             registryURL = registryURL.addParameter(PROXY_KEY, proxy);
                         }
 
+                        // TODO invoke -> 代理类 (很重要！！！)
                         Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
                         DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                        // {@code wrapperInvoker} -> registry://
+                        /**
+                         * {@code protocol} -> ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension()
+                         * 自适应扩展点
+                         * 默认情况下会走 {@link org.apache.dubbo.registry.integration.RegistryProtocol#export(Invoker)}
+                          */
                         Exporter<?> exporter = protocol.export(wrapperInvoker);
                         exporters.add(exporter);
                     }
